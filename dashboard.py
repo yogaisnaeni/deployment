@@ -7,98 +7,127 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, confusion_matrix, ConfusionMatrixDisplay
-from sklearn.preprocessing import StandardScaler, label_binarize
+from sklearn.preprocessing import StandardScaler
 
 # Function for Data Exploration
 def data_exploration(df):
     st.subheader("Data Exploration")
-    
-    # Display general information
-    st.write("### Dataset Information")
-    st.write(f"Shape of dataset: {df.shape}")
+    st.write(f"### Dataset Information (Shape: {df.shape})")
     st.write("Columns:", list(df.columns))
-
-    # Show missing values
-    st.write("### Missing Values")
+    
     missing_values = df.isnull().sum()
-    st.write(missing_values[missing_values > 0])
-
-    # Display Descriptive Statistics
+    if missing_values.sum() > 0:
+        st.write("### Missing Values")
+        st.write(missing_values[missing_values > 0])
+    else:
+        st.write("No missing values found.")
+    
     st.write("### Descriptive Statistics")
     st.write(df.describe())
-
-    # Visualization for Numerical Columns
+    
     numerical_cols = df.select_dtypes(include='number').columns
     if len(numerical_cols) > 0:
-        st.write("### Numerical Data Distributions")
         for col in numerical_cols:
             st.write(f"#### Distribution of {col}")
-            plt.figure(figsize=(8, 4))
-            sns.histplot(df[col].dropna(), kde=True, bins=20, color="blue")
-            st.pyplot(plt)
+            fig, ax = plt.subplots(figsize=(8, 4))
+            sns.histplot(df[col].dropna(), kde=True, bins=20, ax=ax)
+            plt.xticks(rotation=45, ha="right")  # Rotasi agar lebih rapi
+            st.pyplot(fig)
+        
+        if len(numerical_cols) > 1:
+            st.write("### Correlation Heatmap")
+            fig, ax = plt.subplots(figsize=(10, 6))
+            sns.heatmap(df[numerical_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+            st.pyplot(fig)
     else:
         st.write("No numerical columns found.")
 
-    # Correlation Heatmap
-    if len(numerical_cols) > 1:
-        st.write("### Correlation Heatmap")
-        plt.figure(figsize=(10, 6))
-        sns.heatmap(df[numerical_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f")
-        plt.title("Correlation Heatmap")
-        st.pyplot(plt)
-    else:
-        st.write("Not enough numerical columns to calculate correlations.")
-
-# Function for K-Means Clustering Visualization
-def kmeans_visualization(df):
-    st.subheader("K-Means Clustering")
-    numerical_cols = df.select_dtypes(include='number').columns
+# Function for Logistic Regression
+def logistic_regression_visualization(df):
+    st.subheader("Logistic Regression")
+    numerical_cols = df.select_dtypes(include='number').columns.tolist()
+    if not numerical_cols:
+        st.write("No numerical columns available for analysis.")
+        return
+    
+    target = st.selectbox("Select Target Column", df.columns)
+    
+    X = df[numerical_cols]
+    if target in numerical_cols:
+        X = X.drop(columns=[target])
+    y = df[target]
+    
     scaler = StandardScaler()
-    scaled_data = scaler.fit_transform(df[numerical_cols])
+    X_scaled = scaler.fit_transform(X)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+    score = model.score(X_test, y_test)
+    st.write(f"Model Accuracy: {score:.2f}")
+    
+    # Bar chart visualization
+    for col in numerical_cols:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        sns.barplot(x=df[target], y=df[col], ax=ax)
+        ax.set_title(f"Distribution of {col} by {target}")
+        st.pyplot(fig)
 
-    # PCA for Dimensionality Reduction
-    pca = PCA(n_components=2)
-    pca_data = pca.fit_transform(scaled_data)
-
-    # K-Means Clustering
-    kmeans = KMeans(n_clusters=3, random_state=42)
-    df['Cluster'] = kmeans.fit_predict(scaled_data)
-
-    # Map Risk Levels
-    risk_mapping = {0: 'Low Risk', 1: 'Medium Risk', 2: 'High Risk'}
-    df['Risk Level'] = df['Cluster'].map(risk_mapping)
-
-    # Visualization
-    plt.figure(figsize=(8, 6))
-    sns.scatterplot(x=pca_data[:, 0], y=pca_data[:, 1], hue=df['Risk Level'], palette={'Low Risk': 'green', 'Medium Risk': 'cyan', 'High Risk': 'red'})
-    plt.title('K-Means Clustering with PCA')
-    plt.xlabel('Principal Component 1')
-    plt.ylabel('Principal Component 2')
-    st.pyplot(plt)
+# Function for ROC AUC Analysis
+def roc_auc_analysis(df):
+    st.subheader("ROC AUC Analysis")
+    numerical_cols = df.select_dtypes(include='number').columns.tolist()
+    if not numerical_cols:
+        st.write("No numerical columns available for analysis.")
+        return
+    
+    target = st.selectbox("Select Target Column", df.columns)
+    
+    X = df[numerical_cols]
+    if target in numerical_cols:
+        X = X.drop(columns=[target])
+    y = df[target]
+    
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+    model = LogisticRegression()
+    model.fit(X_train, y_train)
+    y_pred = model.predict_proba(X_test)[:, 1]
+    auc = roc_auc_score(y_test, y_pred)
+    st.write(f"ROC AUC Score: {auc:.2f}")
+    
+    fig, ax = plt.subplots(figsize=(5, 4))
+    cm = confusion_matrix(y_test, model.predict(X_test))
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+    disp.plot(ax=ax)
+    st.pyplot(fig)
+    
+    # Bar chart visualization
+    for col in numerical_cols:
+        fig, ax = plt.subplots(figsize=(6, 4))
+        sns.barplot(x=df[target], y=df[col], ax=ax)
+        ax.set_title(f"Distribution of {col} by {target}")
+        st.pyplot(fig)
 
 # Main Function
 def main():
     st.title("Data Analysis Dashboard")
-    st.sidebar.title("Menu")
-    analysis_type = st.sidebar.radio("Choose Analysis", ["Data Exploration", "K-Means Clustering", "Logistic Regression", "ROC AUC Analysis"])
-    st.write(f"Selected Analysis: {analysis_type}")
-
-    # Upload Dataset
+    analysis_type = st.sidebar.radio("Choose Analysis", ["Data Exploration", "Logistic Regression", "ROC AUC Analysis"])
     uploaded_file = st.sidebar.file_uploader("Upload Dataset", type=["csv"])
+    
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        st.dataframe(df.head())  # Tampilkan preview dataset
-        st.write(f"Dataset shape: {df.shape}")  # Menampilkan ukuran dataset
+        st.write(f"Dataset shape: {df.shape}")
+        st.dataframe(df.head())
         
-        # Execute Analysis
         if analysis_type == "Data Exploration":
             data_exploration(df)
-        elif analysis_type == "K-Means Clustering":
-            kmeans_visualization(df)
         elif analysis_type == "Logistic Regression":
             logistic_regression_visualization(df)
         elif analysis_type == "ROC AUC Analysis":
-            roc_auc_visualization(df)
+            roc_auc_analysis(df)
     else:
         st.write("Please upload a dataset.")
 
